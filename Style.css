@@ -65,6 +65,9 @@ textarea, .query-editor {
     border-radius: 4px;
     resize: vertical;
     line-height: 1.5;
+    white-space: nowrap;        /* Impede quebra de linha */
+    overflow-x: auto;           /* Scroll horizontal */
+    overflow-y: auto;           /* Scroll vertical normal */
 }
 
 textarea:focus, .query-editor:focus {
