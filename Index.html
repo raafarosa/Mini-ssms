@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Mini SSMS - Analisador de Múltiplas Tabelas RPT</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Mini SSMS - Analisador de Múltiplas Tabelas RPT</h1>
+            <p>Carregue arquivos .rpt com várias consultas e trabalhe com múltiplas tabelas em abas</p>
+        </div>
+
+        <div class="panel">
+            <h3 class="panel-title">📁 1. Carregar Arquivo RPT</h3>
+            <div class="btn-group">
+                <input type="file" id="fileInput" accept=".rpt,.txt" style="display: none;" onchange="loadFile()">
+                <button onclick="document.getElementById('fileInput').click()">
+                    📂 Selecionar Arquivo RPT
+                </button>
+                <span id="fileName" style="color: #888; font-size: 13px; margin-left: 10px;">
+                    Nenhum arquivo selecionado
+                </span>
+            </div>
+
+            <textarea id="inputData" rows="6" placeholder="Cole o conteúdo do RPT aqui..."></textarea>
+            
+            <div class="btn-group">
+                <button class="success" onclick="processMultiTableData()">
+                    🔄 Processar Múltiplas Tabelas
+                </button>
+                <button class="secondary" onclick="clearAllData()">
+                    🗑️ Limpar Tudo
+                </button>
+            </div>
+        </div>
+
+        <div class="status-bar" id="statusBar">
+            <span>Pronto</span>
+            <span id="globalRowCount" class="row-count">0 tabelas</span>
+        </div>
+
+        <div class="panel">
+            <h3 class="panel-title">📝 2. Editor de Consultas SQL</h3>
+            
+            <div class="query-tabs">
+                <div class="query-tab active" onclick="switchQueryTab('editor')">Editor</div>
+                <div class="query-tab" onclick="switchQueryTab('selection')">Seleção Atual</div>
+            </div>
+
+            <div id="editorTab">
+                <textarea id="sqlQuery" rows="8" class="query-editor" spellcheck="false">SELECT * FROM tabela_1</textarea>
+                <div class="info-box" style="margin-top: 5px; padding: 5px;">
+                    💡 Tabelas disponíveis: <span id="availableTables">nenhuma</span>
+                </div>
+            </div>
+
+            <div id="selectionTab" style="display: none;">
+                <div class="query-selection" id="selectionContent">
+                    Selecione um trecho da consulta acima para executar apenas ele
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="success" onclick="executeQuery()" title="F5">
+                    ▶️ Executar (F5)
+                </button>
+                <button class="secondary" onclick="executeSelectedQuery()" title="Executar apenas o SQL selecionado">
+                    🔍 Executar Selecionado
+                </button>
+                <button class="secondary" onclick="showAllTables()">
+                    📋 Listar Todas Tabelas
+                </button>
+                <button onclick="downloadCurrentExcel()">
+                    📊 Exportar Tabela Atual
+                </button>
+            </div>
+
+            <div class="message-area" id="messageArea">
+Mensagens
+---------------
+Sistema pronto. Carregue um arquivo .rpt com múltiplas tabelas.
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3 class="panel-title">📊 3. Abas de Resultados</h3>
+            
+            <div id="tableTabsContainer" class="table-tabs">
+            </div>
+
+            <div id="currentTableInfo" class="table-info">
+                Nenhuma tabela carregada
+            </div>
+
+            <div class="table-container">
+                <table id="output"></table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/alasql@4.3.0/dist/alasql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
