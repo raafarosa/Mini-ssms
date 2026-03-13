@@ -104,39 +104,3 @@ SELECT * FROM ECONT WHERE EXCTADB > 100
 SELECT COUNT(*) FROM tabela_1
 SELECT * FROM clientes_2 ORDER BY nome
 ```
-
-## 🔧 Configuração
-
-Nenhuma configuração necessária! Basta abrir o HTML e começar a usar.
-
-## 🤝 Contribuindo
-
-Contribuições são sempre bem-vindas!
-
-1. Fork o projeto
-2. Crie sua branch (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
-
-## 📝 Licença
-
-Distribuído sob a licença MIT. Veja `LICENSE` para mais informações.
-
-## 📧 Contato
-
-Seu Nome - [@seutwitter](https://twitter.com/seutwitter) - email@exemplo.com
-
-Link do projeto: [https://github.com/seu-usuario/mini-ssms-rpt](https://github.com/seu-usuario/mini-ssms-rpt)
-
-## ✨ Roadmap
-
-- [ ] Suporte a mais formatos de arquivo (.csv, .txt)
-- [ ] Gráficos básicos dos resultados
-- [ ] Salvar consultas frequentes
-- [ ] Temas (claro/escuro)
-- [ ] Histórico de consultas
-
----
-
-**Desenvolvido com ❤️ para facilitar análises de dados em arquivos .rpt**
