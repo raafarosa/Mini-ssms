@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Mini SSMS - Múltiplas Tabelas RPT</title>
+    <!-- AlaSQL para processamento SQL -->
+    <script src="https://cdn.jsdelivr.net/npm/alasql@4.3.0/dist/alasql.min.js"></script>
+    <!-- SheetJS para exportação Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: #2d2d2d;
+            padding: 15px;
+            border-radius: 5px 5px 0 0;
+            border-bottom: 2px solid #007acc;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 20px;
+            color: #fff;
+        }
+
+        .header p {
+            margin: 5px 0 0;
+            font-size: 12px;
+            color: #888;
+        }
+
+        .panel {
+            background: #252526;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .panel-title {
+            color: #fff;
+            font-size: 14px;
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-left: 3px solid #007acc;
+            padding-left: 10px;
+        }
+
+        textarea, .query-editor {
+            width: 100%;
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            color: #d4d4d4;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            padding: 10px;
+            border-radius: 4px;
+            resize: vertical;
+            line-height: 1.5;
+        }
+
+        textarea:focus, .query-editor:focus {
+            outline: none;
+            border-color: #007acc;
+        }
+
+        .btn-group {
+            margin: 15px 0;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        button {
+            background: #0e639c;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        button:hover {
+            background: #1177bb;
+        }
+
+        button.secondary {
+            background: #2d2d2d;
+            border-color: #3e3e42;
+        }
+
+        button.secondary:hover {
+            background: #3e3e42;
+        }
+
+        button.success {
+            background: #107c41;
+        }
+
+        button.success:hover {
+            background: #1e8f50;
+        }
+
+        .status-bar {
+            background: #007acc;
+            color: white;
+            padding: 8px 15px;
+            font-size: 13px;
+            font-family: 'Consolas', monospace;
+            border-radius: 3px;
+            margin: 10px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .status-error {
+            background: #a1260d;
+        }
+
+        .status-success {
+            background: #107c41;
+        }
+
+        .message-area {
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            color: #d4d4d4;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre; /* MUDANÇA: sem quebra de linha automática */
+            overflow-x: auto;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            max-height: 500px;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            background: #1e1e1e;
+            margin-top: 15px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            color: #d4d4d4;
+        }
+
+        th {
+            background: #2d2d2d;
+            color: #fff;
+            font-weight: 600;
+            padding: 10px 8px;
+            border-bottom: 2px solid #007acc;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 8px;
+            border: 1px solid #3e3e42;
+            white-space: pre;
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        tr:hover td {
+            background: #2a2d2e;
+        }
+
+        .query-tabs {
+            display: flex;
+            gap: 2px;
+            margin-bottom: 10px;
+        }
+
+        .query-tab {
+            background: #2d2d2d;
+            padding: 8px 15px;
+            cursor: pointer;
+            font-size: 12px;
+            border-radius: 3px 3px 0 0;
+            color: #888;
+        }
+
+        .query-tab.active {
+            background: #1e1e1e;
+            color: #fff;
+            border-bottom: 2px solid #007acc;
+        }
+
+        .query-selection {
+            background: #264f78;
+            color: #fff;
+            padding: 10px;
+            border-radius: 3px;
+            margin: 10px 0;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            border-left: 3px solid #007acc;
+            white-space: pre;
+            overflow-x: auto;
+        }
+
+        .info-box {
+            background: #264f78;
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 3px;
+            margin: 10px 0;
+            font-size: 12px;
+            border-left: 3px solid #1cb1d9;
+        }
+
+        .row-count {
+            background: #2d2d2d;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+        }
+
+        .null-value {
+            color: #888;
+            font-style: italic;
+        }
+
+        .table-tabs {
+            display: flex;
+            gap: 2px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid #3e3e42;
+            padding-bottom: 5px;
+        }
+
+        .table-tab {
+            background: #2d2d2d;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            border-radius: 3px 3px 0 0;
+            color: #888;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .table-tab.active {
+            background: #1e1e1e;
+            color: #fff;
+            border-bottom: 2px solid #007acc;
+        }
+
+        .table-tab .badge {
+            background: #0e639c;
+            color: white;
+            border-radius: 10px;
+            padding: 2px 6px;
+            font-size: 10px;
+        }
+
+        .table-tab .close-btn {
+            color: #888;
+            font-size: 14px;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+
+        .table-tab .close-btn:hover {
+            color: #ff6b6b;
+        }
+
+        .table-info {
+            background: #2d2d2d;
+            padding: 5px 10px;
+            border-radius: 3px;
+            margin-bottom: 10px;
+            font-size: 11px;
+            color: #888;
+        }
+
+        .table-info strong {
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Mini SSMS - Analisador de Múltiplas Tabelas RPT</h1>
+        <p>Carregue arquivos .rpt com várias consultas e trabalhe com múltiplas tabelas em abas</p>
+    </div>
+
+    <div class="panel">
+        <h3 class="panel-title">📁 1. Carregar Arquivo RPT</h3>
+        <div class="btn-group">
+            <input type="file" id="fileInput" accept=".rpt,.txt" style="display: none;" onchange="loadFile()">
+            <button onclick="document.getElementById('fileInput').click()">
+                📂 Selecionar Arquivo RPT
+            </button>
+            <span id="fileName" style="color: #888; font-size: 13px; margin-left: 10px;">
+                Nenhum arquivo selecionado
+            </span>
+        </div>
+
+        <textarea id="inputData" rows="6" placeholder="Cole o conteúdo do RPT aqui..."></textarea>
+        
+        <div class="btn-group">
+            <button class="success" onclick="processMultiTableData()">
+                🔄 Processar Múltiplas Tabelas
+            </button>
+            <button class="secondary" onclick="clearAllData()">
+                🗑️ Limpar Tudo
+            </button>
+        </div>
+    </div>
+
+    <div class="status-bar" id="statusBar">
+        <span>Pronto</span>
+        <span id="globalRowCount" class="row-count">0 tabelas</span>
+    </div>
+
+    <div class="panel">
+        <h3 class="panel-title">📝 2. Editor de Consultas SQL</h3>
+        
+        <div class="query-tabs">
+            <div class="query-tab active" onclick="switchQueryTab('editor')">Editor</div>
+            <div class="query-tab" onclick="switchQueryTab('selection')">Seleção Atual</div>
+        </div>
+
+        <div id="editorTab">
+            <textarea id="sqlQuery" rows="8" class="query-editor" spellcheck="false">SELECT * FROM tabela_1</textarea>
+            <div class="info-box" style="margin-top: 5px; padding: 5px;">
+                💡 Tabelas disponíveis: <span id="availableTables">nenhuma</span>
+            </div>
+        </div>
+
+        <div id="selectionTab" style="display: none;">
+            <div class="query-selection" id="selectionContent">
+                Selecione um trecho da consulta acima para executar apenas ele
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button class="success" onclick="executeQuery()" title="F5">
+                ▶️ Executar (F5)
+            </button>
+            <button class="secondary" onclick="executeSelectedQuery()" title="Executar apenas o SQL selecionado">
+                🔍 Executar Selecionado
+            </button>
+            <button class="secondary" onclick="showAllTables()">
+                📋 Listar Todas Tabelas
+            </button>
+            <button onclick="downloadCurrentExcel()">
+                📊 Exportar Tabela Atual
+            </button>
+        </div>
+
+        <div class="message-area" id="messageArea">
+Mensagens
+---------------
+Sistema pronto. Carregue um arquivo .rpt com múltiplas tabelas.
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3 class="panel-title">📊 3. Abas de Resultados</h3>
+        
+        <div id="tableTabsContainer" class="table-tabs">
+        </div>
+
+        <div id="currentTableInfo" class="table-info">
+            Nenhuma tabela carregada
+        </div>
+
+        <div class="table-container">
+            <table id="output"></table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // =========== VARIÁVEIS GLOBAIS ===========
+    let tables = {};              // Objeto com todas as tabelas: { nome: dados }
+    let currentTable = null;      // Nome da tabela atual
+    let tableCounter = 1;         // Contador para nomes padrão
+
+    // =========== FUNÇÕES PRINCIPAIS ===========
+
+    function loadFile() {
+        const fileInput = document.getElementById('fileInput');
+        const file = fileInput.files[0];
+        
+        if (!file) return;
+        
+        document.getElementById('fileName').textContent = `Arquivo: ${file.name}`;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('inputData').value = e.target.result;
+        };
+        reader.readAsText(file);
+    }
+
+    function processMultiTableData() {
+        const text = document.getElementById('inputData').value;
+        if (!text.trim()) {
+            showMessage('Erro: Nenhum dado para processar!', 'error');
+            return;
+        }
+
+        try {
+            tables = {};
+            tableCounter = 1;
+            
+            const lines = text.split('\n');
+            let i = 0;
+            let tableCount = 0;
+            
+            while (i < lines.length) {
+                while (i < lines.length && lines[i].trim() === '') i++;
+                if (i >= lines.length) break;
+                
+                // NOVO: Detectar nome da tabela antes do cabeçalho
+                let tableName = null;
+                let tableDisplayName = null;
+                
+                // Verificar se a linha atual é um nome de tabela (maiúsculas, sem espaços)
+                const possibleTableName = lines[i].trim();
+                if (possibleTableName && /^[A-Z0-9_]+$/.test(possibleTableName) && possibleTableName.length < 30) {
+                    tableName = possibleTableName.toLowerCase();
+                    tableDisplayName = possibleTableName;
+                    i++; // Avançar para próxima linha
+                }
+                
+                // Procurar início de uma tabela (linha com traços)
+                let dashLineIndex = -1;
+                let searchPos = i;
+                
+                while (searchPos < lines.length) {
+                    if (lines[searchPos].includes('---')) {
+                        dashLineIndex = searchPos;
+                        break;
+                    }
+                    searchPos++;
+                }
+                
+                if (dashLineIndex === -1) break;
+                
+                let headerLineIndex = dashLineIndex - 1;
+                while (headerLineIndex >= 0 && lines[headerLineIndex].trim() === '') {
+                    headerLineIndex--;
+                }
+                
+                if (headerLineIndex < 0) {
+                    i = dashLineIndex + 1;
+                    continue;
+                }
+                
+                // Se não encontrou nome da tabela, tentar encontrar nas linhas anteriores
+                if (!tableName) {
+                    for (let j = Math.max(0, headerLineIndex - 3); j < headerLineIndex; j++) {
+                        const line = lines[j].trim();
+                        if (line && line.length < 30 && /^[A-Z0-9_]+$/.test(line)) {
+                            tableName = line.toLowerCase();
+                            tableDisplayName = line;
+                            break;
+                        }
+                    }
+                }
+                
+                // Se ainda não tem nome, usar nome genérico
+                if (!tableName) {
+                    tableName = `tabela_${tableCounter}`;
+                    tableDisplayName = tableName;
+                }
+                
+                // Garantir nome único
+                let baseName = tableName;
+                let counter = 1;
+                while (tables[tableName]) {
+                    tableName = `${baseName}_${counter}`;
+                    counter++;
+                }
+                
+                const result = processSingleTable(lines, headerLineIndex, dashLineIndex);
+                
+                if (result && result.data.length > 0) {
+                    tables[tableName] = {
+                        data: result.data,
+                        columns: result.columns,
+                        displayName: tableDisplayName,
+                        rowCount: result.data.length
+                    };
+                    
+                    tableCounter++;
+                    tableCount++;
+                }
+                
+                i = dashLineIndex + result.consumedLines;
+            }
+            
+            if (tableCount > 0) {
+                updateTableTabs();
+                const tableNames = Object.keys(tables);
+                if (tableNames.length > 0) {
+                    switchToTable(tableNames[0]);
+                }
+                
+                updateStatusBar(`Sucesso: ${tableCount} tabelas carregadas`, 'success');
+                document.getElementById('globalRowCount').textContent = `${tableCount} tabelas`;
+                
+                showMessage(`Carregamento concluído! ${tableCount} tabelas encontradas.`, 'success');
+            } else {
+                showMessage('Nenhuma tabela válida encontrada no arquivo.', 'warning');
+            }
+            
+        } catch (e) {
+            showMessage('Erro ao processar dados: ' + e.message, 'error');
+        }
+    }
+
+    function processSingleTable(lines, headerIndex, dashIndex) {
+        try {
+            const headerLine = lines[headerIndex];
+            const dashLine = lines[dashIndex];
+            
+            const columns = detectColumns(headerLine, dashLine);
+            
+            const data = [];
+            let i = dashIndex + 1;
+            
+            while (i < lines.length) {
+                const line = lines[i];
+                
+                if (line.trim() === '' || line.includes('linhas afetadas')) {
+                    i++;
+                    break;
+                }
+                
+                const row = {};
+                let hasData = false;
+                
+                columns.forEach(col => {
+                    let value = line.substring(col.start, col.end).replace(/\s+$/, '');
+                    if (value === '') {
+                        row[col.name] = null;
+                    } else {
+                        row[col.name] = value;
+                        hasData = true;
+                    }
+                });
+                
+                if (hasData) {
+                    data.push(row);
+                }
+                
+                i++;
+            }
+            
+            return {
+                data: data,
+                columns: columns.map(c => c.name),
+                consumedLines: i - dashIndex
+            };
+            
+        } catch (e) {
+            return { data: [], columns: [], consumedLines: 1 };
+        }
+    }
+
+    function detectColumns(headerLine, dashLine) {
+        const columns = [];
+        let inDash = false;
+        let startPos = 0;
+        
+        for (let i = 0; i <= dashLine.length; i++) {
+            const char = dashLine[i];
+            
+            if (char === '-' && !inDash) {
+                inDash = true;
+                startPos = i;
+            } else if ((char !== '-' || i === dashLine.length) && inDash) {
+                inDash = false;
+                const endPos = i;
+                
+                let colName = headerLine.substring(startPos, endPos).trim();
+                
+                if (!colName) {
+                    colName = `COL_${columns.length + 1}`;
+                }
+                
+                colName = colName.replace(/[^a-zA-Z0-9_]/g, '_');
+                if (colName.match(/^[0-9]/)) {
+                    colName = 'C_' + colName;
+                }
+                
+                columns.push({
+                    start: startPos,
+                    end: endPos,
+                    name: colName
+                });
+            }
+        }
+        
+        return columns;
+    }
+
+    function updateTableTabs() {
+        const container = document.getElementById('tableTabsContainer');
+        container.innerHTML = '';
+        
+        const tableNames = Object.keys(tables);
+        
+        if (tableNames.length === 0) {
+            container.innerHTML = '<div style="color: #888; padding: 5px;">Nenhuma tabela carregada</div>';
+            document.getElementById('currentTableInfo').innerHTML = 'Nenhuma tabela carregada';
+            document.getElementById('availableTables').textContent = 'nenhuma';
+            return;
+        }
+        
+        tableNames.forEach(tableName => {
+            const table = tables[tableName];
+            const tab = document.createElement('div');
+            tab.className = 'table-tab' + (currentTable === tableName ? ' active' : '');
+            tab.innerHTML = `
+                ${table.displayName} <span class="badge">${table.rowCount}</span>
+                <span class="close-btn" onclick="removeTable('${tableName}', event)">×</span>
+            `;
+            tab.onclick = (e) => {
+                if (!e.target.classList.contains('close-btn')) {
+                    switchToTable(tableName);
+                }
+            };
+            container.appendChild(tab);
+        });
+        
+        document.getElementById('availableTables').textContent = tableNames.map(t => tables[t].displayName).join(', ');
+    }
+
+    function switchToTable(tableName) {
+        if (!tables[tableName]) return;
+        
+        currentTable = tableName;
+        const table = tables[tableName];
+        
+        document.querySelectorAll('.table-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        
+        const tabs = document.getElementById('tableTabsContainer').children;
+        const tableNames = Object.keys(tables);
+        const index = tableNames.indexOf(tableName);
+        if (index >= 0 && tabs[index]) {
+            tabs[index].classList.add('active');
+        }
+        
+        document.getElementById('currentTableInfo').innerHTML = `
+            <strong>Tabela atual:</strong> ${table.displayName} | 
+            <strong>Linhas:</strong> ${table.rowCount} | 
+            <strong>Colunas:</strong> ${table.columns.length}
+        `;
+        
+        renderTable(table.data);
+        
+        const sqlEditor = document.getElementById('sqlQuery');
+        sqlEditor.value = `SELECT * FROM ${tableName}`;
+        
+        showMessage(`Tabela "${table.displayName}" selecionada. ${table.rowCount} linhas, ${table.columns.length} colunas.`, 'info');
+    }
+
+    function removeTable(tableName, event) {
+        event.stopPropagation();
+        
+        if (confirm(`Remover tabela "${tables[tableName].displayName}"?`)) {
+            delete tables[tableName];
+            
+            if (Object.keys(tables).length === 0) {
+                currentTable = null;
+                document.getElementById('output').innerHTML = '';
+                document.getElementById('currentTableInfo').innerHTML = 'Nenhuma tabela carregada';
+            } else {
+                const firstTable = Object.keys(tables)[0];
+                switchToTable(firstTable);
+            }
+            
+            updateTableTabs();
+            updateStatusBar(`${Object.keys(tables).length} tabelas restantes`, 'info');
+        }
+    }
+
+    function executeQuery() {
+        const sql = document.getElementById('sqlQuery').value;
+        if (!sql.trim()) {
+            showMessage('Digite uma consulta SQL.', 'warning');
+            return;
+        }
+
+        try {
+            Object.keys(tables).forEach(tableName => {
+                alasql(`DROP TABLE IF EXISTS ${tableName}`);
+                alasql(`CREATE TABLE ${tableName}`);
+                alasql.tables[tableName].data = tables[tableName].data.map(row => {
+                    const newRow = {};
+                    Object.keys(row).forEach(key => {
+                        newRow[key] = row[key] === null ? null : String(row[key]);
+                    });
+                    return newRow;
+                });
+            });
+            
+            const startTime = performance.now();
+            const result = alasql(sql);
+            const endTime = performance.now();
+            
+            if (result && Array.isArray(result)) {
+                renderTable(result);
+                showMessage(`Query executada em ${(endTime - startTime).toFixed(2)}ms. ${result.length} linhas retornadas.`, 'success');
+            } else {
+                showMessage('Query executada com sucesso.', 'success');
+            }
+            
+        } catch (e) {
+            showMessage('Erro SQL: ' + e.message, 'error');
+        }
+    }
+
+    function executeSelectedQuery() {
+        const textarea = document.getElementById('sqlQuery');
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        
+        if (start === end) {
+            showMessage('Selecione um trecho da consulta para executar.', 'warning');
+            return;
+        }
+        
+        const selectedSQL = textarea.value.substring(start, end).trim();
+        if (!selectedSQL) return;
+        
+        document.getElementById('selectionContent').textContent = selectedSQL;
+        
+        Object.keys(tables).forEach(tableName => {
+            alasql(`DROP TABLE IF EXISTS ${tableName}`);
+            alasql(`CREATE TABLE ${tableName}`);
+            alasql.tables[tableName].data = tables[tableName].data;
+        });
+        
+        try {
+            const result = alasql(selectedSQL);
+            if (result && Array.isArray(result)) {
+                renderTable(result);
+                showMessage(`Query selecionada executada. ${result.length} linhas retornadas.`, 'success');
+            }
+        } catch (e) {
+            showMessage('Erro: ' + e.message, 'error');
+        }
+    }
+
+    function showAllTables() {
+        const tableNames = Object.keys(tables);
+        if (tableNames.length === 0) {
+            showMessage('Nenhuma tabela carregada.', 'warning');
+            return;
+        }
+        
+        let msg = 'Tabelas disponíveis:\n';
+        tableNames.forEach(name => {
+            const table = tables[name];
+            msg += `\n${table.displayName} (${name}): ${table.rowCount} linhas, ${table.columns.length} colunas`;
+        });
+        
+        showMessage(msg, 'info');
+    }
+
+    function downloadCurrentExcel() {
+        if (!currentTable || !tables[currentTable]) {
+            showMessage('Selecione uma tabela primeiro.', 'warning');
+            return;
+        }
+        
+        try {
+            const data = tables[currentTable].data;
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.json_to_sheet(data);
+            XLSX.utils.book_append_sheet(wb, ws, tables[currentTable].displayName);
+            XLSX.writeFile(wb, `${tables[currentTable].displayName}.xlsx`);
+            
+            showMessage(`Tabela "${tables[currentTable].displayName}" exportada!`, 'success');
+        } catch (e) {
+            showMessage('Erro ao exportar: ' + e.message, 'error');
+        }
+    }
+
+    function clearAllData() {
+        tables = {};
+        currentTable = null;
+        tableCounter = 1;
+        
+        document.getElementById('inputData').value = '';
+        document.getElementById('fileName').textContent = 'Nenhum arquivo selecionado';
+        document.getElementById('fileInput').value = '';
+        document.getElementById('output').innerHTML = '';
+        document.getElementById('tableTabsContainer').innerHTML = '<div style="color: #888; padding: 5px;">Nenhuma tabela carregada</div>';
+        document.getElementById('currentTableInfo').innerHTML = 'Nenhuma tabela carregada';
+        document.getElementById('availableTables').textContent = 'nenhuma';
+        document.getElementById('statusBar').innerHTML = '<span>Pronto</span><span class="row-count">0 tabelas</span>';
+        document.getElementById('globalRowCount').textContent = '0 tabelas';
+        document.getElementById('messageArea').innerHTML = 'Mensagens\n---------------\nDados limpos.';
+        
+        showMessage('Todos os dados foram removidos.', 'info');
+    }
+
+    function renderTable(data) {
+        const table = document.getElementById('output');
+        table.innerHTML = '';
+        
+        if (!data || data.length === 0) {
+            table.innerHTML = '<tr><td style="text-align:center; padding:20px;">Nenhum resultado</td></tr>';
+            return;
+        }
+
+        const cols = Object.keys(data[0]);
+        
+        let html = '<thead><tr>';
+        cols.forEach(col => {
+            html += `<th>${col}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+        
+        data.forEach(row => {
+            html += '<tr>';
+            cols.forEach(col => {
+                let value = row[col];
+                if (value === null || value === undefined) {
+                    html += '<td class="null-value">NULL</td>';
+                } else {
+                    value = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    html += `<td title="${value}">${value}</td>`;
+                }
+            });
+            html += '</tr>';
+        });
+        
+        table.innerHTML = html + '</tbody>';
+    }
+
+    function showMessage(msg, type = 'info') {
+        const messageArea = document.getElementById('messageArea');
+        const timestamp = new Date().toLocaleTimeString();
+        
+        let typeIndicator = '';
+        switch(type) {
+            case 'error': typeIndicator = 'ERRO'; break;
+            case 'success': typeIndicator = 'SUCESSO'; break;
+            case 'warning': typeIndicator = 'AVISO'; break;
+            default: typeIndicator = 'INFO';
+        }
+        
+        messageArea.innerHTML = `Mensagens (${timestamp})\n---------------\n${typeIndicator}: ${msg}`;
+    }
+
+    function updateStatusBar(msg, type = 'info') {
+        const statusBar = document.getElementById('statusBar');
+        const rowCount = document.getElementById('globalRowCount').textContent;
+        statusBar.innerHTML = `<span>${msg}</span><span class="row-count">${rowCount}</span>`;
+        
+        statusBar.className = 'status-bar';
+        if (type === 'error') {
+            statusBar.classList.add('status-error');
+        } else if (type === 'success') {
+            statusBar.classList.add('status-success');
+        }
+    }
+
+    function switchQueryTab(tab) {
+        const editorTab = document.getElementById('editorTab');
+        const selectionTab = document.getElementById('selectionTab');
+        const tabs = document.querySelectorAll('.query-tab');
+        
+        tabs.forEach(t => t.classList.remove('active'));
+        
+        if (tab === 'editor') {
+            editorTab.style.display = 'block';
+            selectionTab.style.display = 'none';
+            tabs[0].classList.add('active');
+        } else {
+            editorTab.style.display = 'none';
+            selectionTab.style.display = 'block';
+            tabs[1].classList.add('active');
+            
+            const textarea = document.getElementById('sqlQuery');
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            
+            if (start !== end) {
+                document.getElementById('selectionContent').textContent = 
+                    textarea.value.substring(start, end).trim() || 'Selecione um trecho da consulta';
+            }
+        }
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'F5') {
+            e.preventDefault();
+            executeQuery();
+        }
+    });
+</script>
+
+</body>
+</html>
