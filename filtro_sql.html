@@ -154,7 +154,7 @@
             color: #d4d4d4;
             max-height: 200px;
             overflow-y: auto;
-            white-space: pre;
+            white-space: pre; /* MUDANÇA: sem quebra de linha automática */
             overflow-x: auto;
         }
 
@@ -183,16 +183,16 @@
             position: sticky;
             top: 0;
             z-index: 10;
-            white-space: nowrap; /* Cabeçalhos sem quebra */
+            white-space: nowrap;
         }
 
         td {
             padding: 8px;
             border: 1px solid #3e3e42;
-            white-space: nowrap; /* Células sem quebra de linha */
+            white-space: pre;
             max-width: 400px;
-            overflow-x: auto; /* Scroll horizontal se necessário */
-            text-overflow: clip;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         tr:hover td {
@@ -453,11 +453,11 @@ Sistema pronto. Carregue um arquivo .rpt com múltiplas tabelas.
                 while (i < lines.length && lines[i].trim() === '') i++;
                 if (i >= lines.length) break;
                 
-                // Detectar nome da tabela antes do cabeçalho
+                // NOVO: Detectar nome da tabela antes do cabeçalho
                 let tableName = null;
                 let tableDisplayName = null;
                 
-                // Verificar se a linha atual é um nome de tabela
+                // Verificar se a linha atual é um nome de tabela (maiúsculas, sem espaços)
                 const possibleTableName = lines[i].trim();
                 if (possibleTableName && /^[A-Z0-9_]+$/.test(possibleTableName) && possibleTableName.length < 30) {
                     tableName = possibleTableName.toLowerCase();
@@ -843,7 +843,6 @@ Sistema pronto. Carregue um arquivo .rpt com múltiplas tabelas.
         showMessage('Todos os dados foram removidos.', 'info');
     }
 
-    // FUNÇÃO CORRIGIDA: Remove quebras de linha das células
     function renderTable(data) {
         const table = document.getElementById('output');
         table.innerHTML = '';
@@ -869,8 +868,6 @@ Sistema pronto. Carregue um arquivo .rpt com múltiplas tabelas.
                     html += '<td class="null-value">NULL</td>';
                 } else {
                     value = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    // Remove quebras de linha, tabs e espaços múltiplos
-                    value = value.replace(/[\n\r\t]+/g, ' ').replace(/\s+/g, ' ').trim();
                     html += `<td title="${value}">${value}</td>`;
                 }
             });
