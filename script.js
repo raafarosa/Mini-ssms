@@ -53,16 +53,17 @@ function processMultiTableData() {
             while (i < lines.length && lines[i].trim() === '') i++;
             if (i >= lines.length) break;
             
-            // Detectar nome da tabela (linha com texto maiúsculo antes dos dados)
+            // VARIÁVEIS PARA O NOME DA TABELA
             let tableName = null;
             let tableDisplayName = null;
             
-            // Verificar se a linha atual parece um nome de tabela (maiúsculas, sem espaços)
+            // Verificar 3 formas de obter o nome da tabela:
+            // 1. Nome da tabela em linha separada (formato antigo)
             const possibleTableName = lines[i].trim();
             if (possibleTableName && /^[A-Z0-9_]+$/.test(possibleTableName) && possibleTableName.length < 30) {
                 tableName = possibleTableName.toLowerCase();
                 tableDisplayName = possibleTableName;
-                i++; // Avançar para próxima linha após o nome da tabela
+                i++; // Avançar para próxima linha
             }
             
             // Procurar linha com traços (---)
@@ -90,7 +91,78 @@ function processMultiTableData() {
                 continue;
             }
             
-            // Se não encontrou nome da tabela, procurar nas linhas anteriores ao cabeçalho
+            const headerLine = lines[headerLineIndex];
+            const dashLine = lines[dashLineIndex];
+            
+            // Detectar colunas baseado nos traços
+            const columns = detectColumns(headerLine, dashLine);
+            
+            // 2. Verificar se a primeira coluna é chamada "TABELA"
+            const primeiraColuna = columns.length > 0 ? columns[0].name : '';
+            const primeiraColunaRaw = columns.length > 0 ? headerLine.substring(columns[0].start, columns[0].end).trim() : '';
+            
+            const temColunaTabela = primeiraColunaRaw.toUpperCase() === 'TABELA' || primeiraColuna === 'TABELA';
+            
+            // Processar os dados para extrair nomes das tabelas
+            const result = processSingleTable(lines, headerLineIndex, dashLineIndex, temColunaTabela);
+            
+            // 3. Se tem coluna TABELA, extrair nomes únicos dela
+            if (temColunaTabela && result && result.data) {
+                // Extrair nomes únicos da primeira coluna
+                const nomesTabelas = [...new Set(result.data.map(row => {
+                    const valor = row[columns[0].name];
+                    return valor ? String(valor).trim() : null;
+                }).filter(v => v && v !== ''))];
+                
+                console.log('Nomes de tabela encontrados na primeira coluna:', nomesTabelas);
+                
+                // Se encontrou nomes, criar tabelas separadas
+                if (nomesTabelas.length > 0) {
+                    // Para cada nome de tabela, filtrar os dados
+                    nomesTabelas.forEach(nome => {
+                        // Limpar nome para usar como identificador
+                        let cleanName = nome.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+                        if (!cleanName) cleanName = `tabela_${tableCounter}`;
+                        
+                        // Garantir nome único
+                        let finalName = cleanName;
+                        let counter = 1;
+                        while (tables[finalName]) {
+                            finalName = `${cleanName}_${counter}`;
+                            counter++;
+                        }
+                        
+                        // Filtrar dados desta tabela
+                        const tabelaData = result.data.filter(row => {
+                            const valor = row[columns[0].name];
+                            return valor && String(valor).trim() === nome;
+                        }).map(row => {
+                            // Remover a primeira coluna (TABELA) dos dados
+                            const { [columns[0].name]: removed, ...rest } = row;
+                            return rest;
+                        });
+                        
+                        // Determinar colunas (todas exceto a primeira)
+                        const outrasColunas = columns.slice(1).map(c => c.name);
+                        
+                        if (tabelaData.length > 0) {
+                            tables[finalName] = {
+                                data: tabelaData,
+                                columns: outrasColunas,
+                                displayName: nome,
+                                rowCount: tabelaData.length
+                            };
+                            tableCount++;
+                        }
+                    });
+                    
+                    // Avançar para próxima tabela
+                    i = dashLineIndex + result.consumedLines;
+                    continue;
+                }
+            }
+            
+            // Se não encontrou nome da tabela na coluna, tentar nas linhas anteriores
             if (!tableName) {
                 for (let j = Math.max(0, headerLineIndex - 3); j < headerLineIndex; j++) {
                     const line = lines[j].trim();
@@ -115,9 +187,6 @@ function processMultiTableData() {
                 tableName = `${baseName}_${counter}`;
                 counter++;
             }
-            
-            // Processar os dados desta tabela
-            const result = processSingleTable(lines, headerLineIndex, dashLineIndex);
             
             if (result && result.data && result.data.length > 0) {
                 tables[tableName] = {
@@ -161,7 +230,7 @@ function processMultiTableData() {
     }
 }
 
-function processSingleTable(lines, headerIndex, dashIndex) {
+function processSingleTable(lines, headerIndex, dashIndex, removerPrimeiraColuna = false) {
     try {
         if (!lines || lines.length === 0 || headerIndex < 0 || dashIndex < 0) {
             return { data: [], columns: [], consumedLines: 1 };
@@ -179,72 +248,55 @@ function processSingleTable(lines, headerIndex, dashIndex) {
         const data = [];
         let i = dashIndex + 1;
         
-        // Primeiro, vamos encontrar onde termina esta tabela
+        // Encontrar onde termina esta tabela
         let fimTabelaIndex = -1;
         
-        // Procurar pelo próximo bloco de tabela
         for (let j = dashIndex + 1; j < lines.length; j++) {
             const line = lines[j];
             
-            // Se encontrar "linhas afetadas", este é o fim
             if (line.includes('linhas afetadas')) {
-                fimTabelaIndex = j - 1; // Termina antes da linha "linhas afetadas"
+                fimTabelaIndex = j - 1;
                 break;
             }
             
-            // Se encontrar uma linha com traços E já passamos algumas linhas
             if (line.includes('---') && j > dashIndex + 5) {
-                // Verificar se a linha anterior parece um cabeçalho
                 if (j > 0 && lines[j-1].trim() !== '') {
-                    fimTabelaIndex = j - 1; // Termina antes dos traços
+                    fimTabelaIndex = j - 1;
                     break;
                 }
             }
             
-            // Se encontrar "SELECT" em nova linha (próxima consulta)
             if (line.toLowerCase().startsWith('select ') && j > dashIndex + 5) {
                 fimTabelaIndex = j - 1;
                 break;
             }
         }
         
-        // Se não encontrou fim, vai até o final do arquivo
         if (fimTabelaIndex === -1) {
             fimTabelaIndex = lines.length - 1;
         }
         
-        console.log(`processSingleTable: processando linhas ${dashIndex + 1} até ${fimTabelaIndex}`);
-        
-        // Agora processa as linhas até o fim identificado
         i = dashIndex + 1;
         while (i <= fimTabelaIndex) {
             const line = lines[i];
             
-            // Pular linhas que são claramente não-dados
             if (line.includes('linhas afetadas')) {
                 i++;
                 continue;
             }
             
-            // Se a linha está em branco, apenas pula
             if (line.trim() === '') {
                 i++;
                 continue;
             }
             
-            // Processar linha de dados
             const row = {};
             let hasData = false;
             
             columns.forEach(col => {
                 if (col && col.start !== undefined && col.end !== undefined) {
-                    // Garantir que não ultrapasse o tamanho da linha
                     const endPos = Math.min(col.end, line.length);
-                    let value = line.substring(col.start, endPos);
-                    
-                    // Importante: NÃO fazer trim completo para preservar zeros à esquerda
-                    // Apenas remove espaços do final, mantém espaços do início
-                    value = value.replace(/\s+$/, '');
+                    let value = line.substring(col.start, endPos).replace(/\s+$/, '');
                     
                     if (value === '') {
                         row[col.name] = null;
@@ -255,15 +307,12 @@ function processSingleTable(lines, headerIndex, dashIndex) {
                 }
             });
             
-            // Só adiciona se realmente tem dados
             if (hasData && Object.keys(row).length > 0) {
                 data.push(row);
             }
             
             i++;
         }
-        
-        console.log(`processSingleTable: processou ${data.length} registros`);
         
         return {
             data: data,
@@ -371,7 +420,6 @@ function switchToTable(tableName) {
     currentTable = tableName;
     const table = tables[tableName];
     
-    // Atualizar abas
     document.querySelectorAll('.table-tab').forEach(tab => {
         tab.classList.remove('active');
     });
@@ -385,7 +433,6 @@ function switchToTable(tableName) {
         }
     }
     
-    // Atualizar info
     const currentTableInfo = document.getElementById('currentTableInfo');
     if (currentTableInfo) {
         currentTableInfo.innerHTML = `
@@ -395,10 +442,8 @@ function switchToTable(tableName) {
         `;
     }
     
-    // Mostrar dados
     renderTable(table.data || []);
     
-    // Atualizar sugestão de query
     const sqlEditor = document.getElementById('sqlQuery');
     if (sqlEditor) {
         sqlEditor.value = `SELECT * FROM ${tableName}`;
@@ -435,96 +480,17 @@ function removeTable(tableName, event) {
     }
 }
 
-// =========== NOVA VERSÃO DA EXECUÇÃO DE CONSULTAS ===========
-
 function executeQuery() {
     const sqlEditor = document.getElementById('sqlQuery');
     if (!sqlEditor) return;
     
-    const sql = sqlEditor.value.trim();
-    if (!sql) {
+    const sql = sqlEditor.value;
+    if (!sql.trim()) {
         showMessage('Digite uma consulta SQL.', 'warning');
         return;
     }
 
-    // Se for uma consulta SELECT simples, podemos tentar processar manualmente
-    if (sql.toUpperCase().startsWith('SELECT * FROM')) {
-        executeSimpleSelect(sql);
-    } else {
-        executeComplexQuery(sql);
-    }
-}
-
-function executeSimpleSelect(sql) {
     try {
-        // Extrair o nome da tabela
-        const match = sql.match(/SELECT\s+\*\s+FROM\s+(\w+)/i);
-        if (!match) {
-            executeComplexQuery(sql);
-            return;
-        }
-        
-        const tableName = match[1];
-        const table = tables[tableName];
-        
-        if (!table) {
-            showMessage(`Tabela '${tableName}' não encontrada.`, 'error');
-            return;
-        }
-        
-        // Verificar se tem WHERE
-        let filteredData = table.data;
-        
-        if (sql.toUpperCase().includes('WHERE')) {
-            const wherePart = sql.split('WHERE')[1].trim();
-            filteredData = applyWhereFilter(table.data, wherePart);
-        }
-        
-        renderTable(filteredData);
-        showMessage(`✅ Consulta executada. ${filteredData.length} linhas retornadas.`, 'success');
-        
-    } catch (e) {
-        console.error('Erro no executeSimpleSelect:', e);
-        executeComplexQuery(sql);
-    }
-}
-
-function applyWhereFilter(data, whereClause) {
-    try {
-        // Parse simples do WHERE
-        // Ex: rtsistema = '050'
-        const match = whereClause.match(/(\w+)\s*=\s*'([^']*)'/);
-        if (!match) return data;
-        
-        const field = match[1];
-        const value = match[2];
-        
-        console.log(`Filtrando: ${field} = '${value}'`);
-        
-        // Filtrar os dados
-        const results = data.filter(row => {
-            const rowValue = row[field];
-            if (rowValue === null || rowValue === undefined) return false;
-            
-            // Converter para string e comparar de várias formas
-            const rowValueStr = String(rowValue).trim();
-            const searchValue = value.trim();
-            
-            return rowValueStr === searchValue;
-        });
-        
-        console.log(`Encontrados ${results.length} resultados`);
-        return results;
-        
-    } catch (e) {
-        console.error('Erro no filtro:', e);
-        return data;
-    }
-}
-
-function executeComplexQuery(sql) {
-    try {
-        // Registrar todas as tabelas no AlaSQL
         Object.keys(tables).forEach(tableName => {
             const table = tables[tableName];
             if (!table || !table.data) return;
@@ -532,15 +498,10 @@ function executeComplexQuery(sql) {
             alasql(`DROP TABLE IF EXISTS ${tableName}`);
             alasql(`CREATE TABLE ${tableName}`);
             
-            // Converter dados garantindo que tudo seja string
             alasql.tables[tableName].data = table.data.map(row => {
                 const newRow = {};
                 Object.keys(row).forEach(key => {
-                    if (row[key] === null || row[key] === undefined) {
-                        newRow[key] = null;
-                    } else {
-                        newRow[key] = String(row[key]);
-                    }
+                    newRow[key] = row[key] === null ? null : String(row[key]);
                 });
                 return newRow;
             });
@@ -563,105 +524,43 @@ function executeComplexQuery(sql) {
     }
 }
 
-// =========== NOVA FUNÇÃO DE DIAGNÓSTICO ===========
-
-function diagnosticarConsulta() {
-    if (!currentTable || !tables[currentTable]) {
-        showMessage('Selecione uma tabela primeiro.', 'warning');
+function executeSelectedQuery() {
+    const textarea = document.getElementById('sqlQuery');
+    if (!textarea) return;
+    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    
+    if (start === end) {
+        showMessage('Selecione um trecho da consulta para executar.', 'warning');
         return;
     }
     
-    const table = tables[currentTable];
-    const campo = prompt('Digite o nome do campo para diagnosticar (ex: rtsistema):');
-    if (!campo) return;
+    const selectedSQL = textarea.value.substring(start, end).trim();
+    if (!selectedSQL) return;
     
-    const valor = prompt(`Digite o valor que você está procurando no campo '${campo}':`);
-    if (!valor) return;
-    
-    // Verificar se o campo existe
-    if (!table.columns.includes(campo)) {
-        let msg = `❌ Campo '${campo}' não encontrado!\n\n`;
-        msg += `Campos disponíveis:\n${table.columns.join(', ')}`;
-        showMessage(msg, 'error');
-        return;
+    const selectionContent = document.getElementById('selectionContent');
+    if (selectionContent) {
+        selectionContent.textContent = selectedSQL;
     }
     
-    // Coletar amostra dos valores
-    const valores = table.data.map(row => row[campo]).filter(v => v !== null);
-    const valoresUnicos = [...new Set(valores)];
-    
-    let msg = `📊 DIAGNÓSTICO DO CAMPO '${campo}'\n`;
-    msg += `================================\n\n`;
-    msg += `Total de registros: ${table.data.length}\n`;
-    msg += `Registros com valor não-nulo: ${valores.length}\n`;
-    msg += `Valores únicos: ${valoresUnicos.length}\n\n`;
-    
-    // Mostrar primeiros 20 valores únicos
-    msg += `Primeiros 20 valores únicos (como estão armazenados):\n`;
-    valoresUnicos.slice(0, 20).forEach(v => {
-        msg += `  "${v}" (length: ${String(v).length})\n`;
+    Object.keys(tables).forEach(tableName => {
+        const table = tables[tableName];
+        if (!table || !table.data) return;
+        
+        alasql(`DROP TABLE IF EXISTS ${tableName}`);
+        alasql(`CREATE TABLE ${tableName}`);
+        alasql.tables[tableName].data = table.data;
     });
     
-    // Verificar se o valor procurado existe
-    const valorProcurado = valor;
-    const encontrado = valores.some(v => String(v).trim() === valorProcurado.trim());
-    
-    msg += `\n🔍 Buscando por '${valorProcurado}': ${encontrado ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO'}\n`;
-    
-    if (!encontrado) {
-        msg += `\n💡 Sugestões:\n`;
-        msg += `- Tente: SELECT * FROM ${currentTable} WHERE ${campo} LIKE '%${valorProcurado}%'\n`;
-        msg += `- Verifique se há espaços extras nos dados\n`;
-        msg += `- Confirme se o campo realmente tem este valor\n`;
-    }
-    
-    showMessage(msg, 'info');
-}
-
-// =========== NOVA FUNÇÃO DE BUSCA MANUAL ===========
-
-function buscarManual() {
-    if (!currentTable || !tables[currentTable]) {
-        showMessage('Selecione uma tabela primeiro.', 'warning');
-        return;
-    }
-    
-    const table = tables[currentTable];
-    const campo = prompt('Digite o nome do campo para buscar:');
-    if (!campo) return;
-    
-    if (!table.columns.includes(campo)) {
-        showMessage(`Campo '${campo}' não encontrado.`, 'error');
-        return;
-    }
-    
-    const valor = prompt(`Digite o valor para buscar no campo '${campo}':`);
-    if (!valor) return;
-    
-    // Busca manual nos dados
-    const resultados = table.data.filter(row => {
-        const rowValue = row[campo];
-        if (rowValue === null || rowValue === undefined) return false;
-        return String(rowValue).trim().toLowerCase() === valor.trim().toLowerCase();
-    });
-    
-    if (resultados.length > 0) {
-        renderTable(resultados);
-        showMessage(`✅ Encontrados ${resultados.length} registros com '${campo}' = '${valor}'`, 'success');
-    } else {
-        showMessage(`❌ Nenhum registro encontrado com '${campo}' = '${valor}'`, 'warning');
-        
-        // Mostrar valores próximos como sugestão
-        const valoresProximos = table.data
-            .map(row => row[campo])
-            .filter(v => v !== null && String(v).toLowerCase().includes(valor.toLowerCase()))
-            .slice(0, 10);
-        
-        if (valoresProximos.length > 0) {
-            let msg = `Valores similares encontrados:\n`;
-            valoresProximos.forEach(v => msg += `  "${v}"\n`);
-            showMessage(msg, 'info');
+    try {
+        const result = alasql(selectedSQL);
+        if (result && Array.isArray(result)) {
+            renderTable(result);
+            showMessage(`✅ Query selecionada executada. ${result.length} linhas retornadas.`, 'success');
         }
+    } catch (e) {
+        showMessage('❌ Erro: ' + e.message, 'error');
     }
 }
 
@@ -686,6 +585,83 @@ function showAllTables() {
     });
     
     showMessage(msg, 'info');
+}
+
+function diagnosticarConsulta() {
+    if (!currentTable || !tables[currentTable]) {
+        showMessage('Selecione uma tabela primeiro.', 'warning');
+        return;
+    }
+    
+    const table = tables[currentTable];
+    const campo = prompt('Digite o nome do campo para diagnosticar:');
+    if (!campo) return;
+    
+    if (!table.columns.includes(campo)) {
+        let msg = `❌ Campo '${campo}' não encontrado!\n\n`;
+        msg += `Campos disponíveis:\n${table.columns.join(', ')}`;
+        showMessage(msg, 'error');
+        return;
+    }
+    
+    const valores = table.data.map(row => row[campo]).filter(v => v !== null);
+    const valoresUnicos = [...new Set(valores)];
+    
+    let msg = `📊 DIAGNÓSTICO DO CAMPO '${campo}'\n`;
+    msg += `================================\n\n`;
+    msg += `Total de registros: ${table.data.length}\n`;
+    msg += `Registros com valor não-nulo: ${valores.length}\n`;
+    msg += `Valores únicos: ${valoresUnicos.length}\n\n`;
+    
+    msg += `Primeiros 20 valores únicos:\n`;
+    valoresUnicos.slice(0, 20).forEach(v => {
+        msg += `  "${v}" (length: ${String(v).length})\n`;
+    });
+    
+    showMessage(msg, 'info');
+}
+
+function buscarManual() {
+    if (!currentTable || !tables[currentTable]) {
+        showMessage('Selecione uma tabela primeiro.', 'warning');
+        return;
+    }
+    
+    const table = tables[currentTable];
+    const campo = prompt('Digite o nome do campo para buscar:');
+    if (!campo) return;
+    
+    if (!table.columns.includes(campo)) {
+        showMessage(`Campo '${campo}' não encontrado.`, 'error');
+        return;
+    }
+    
+    const valor = prompt(`Digite o valor para buscar no campo '${campo}':`);
+    if (!valor) return;
+    
+    const resultados = table.data.filter(row => {
+        const rowValue = row[campo];
+        if (rowValue === null || rowValue === undefined) return false;
+        return String(rowValue).trim().toLowerCase() === valor.trim().toLowerCase();
+    });
+    
+    if (resultados.length > 0) {
+        renderTable(resultados);
+        showMessage(`✅ Encontrados ${resultados.length} registros com '${campo}' = '${valor}'`, 'success');
+    } else {
+        showMessage(`❌ Nenhum registro encontrado com '${campo}' = '${valor}'`, 'warning');
+        
+        const valoresProximos = table.data
+            .map(row => row[campo])
+            .filter(v => v !== null && String(v).toLowerCase().includes(valor.toLowerCase()))
+            .slice(0, 10);
+        
+        if (valoresProximos.length > 0) {
+            let msg = `Valores similares encontrados:\n`;
+            valoresProximos.forEach(v => msg += `  "${v}"\n`);
+            showMessage(msg, 'info');
+        }
+    }
 }
 
 function downloadCurrentExcel() {
@@ -782,7 +758,6 @@ function renderTable(data) {
     });
     html += '</tr></thead><tbody>';
     
-    // Limitar a exibição para 1000 linhas por vez (performance)
     const maxLinhas = 1000;
     const linhasParaMostrar = data.slice(0, maxLinhas);
     
@@ -802,7 +777,6 @@ function renderTable(data) {
     
     table.innerHTML = html + '</tbody>';
     
-    // Mostrar mensagem se houver mais linhas
     if (data.length > maxLinhas) {
         const footer = document.createElement('div');
         footer.style.padding = '10px';
