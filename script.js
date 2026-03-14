@@ -178,9 +178,6 @@ function processSingleTable(lines, headerIndex, dashIndex) {
         
         const data = [];
         let i = dashIndex + 1;
-        let encontrouLinhaAfetadas = false;
-        let linhasEmBrancoConsecutivas = 0;
-        const MAX_BRANCO_CONSECUTIVO = 5; // Aumentado para 5
         
         // Primeiro, vamos encontrar onde termina esta tabela
         let fimTabelaIndex = -1;
@@ -191,8 +188,7 @@ function processSingleTable(lines, headerIndex, dashIndex) {
             
             // Se encontrar "linhas afetadas", este é o fim
             if (line.includes('linhas afetadas')) {
-                fimTabelaIndex = j;
-                encontrouLinhaAfetadas = true;
+                fimTabelaIndex = j - 1; // Termina antes da linha "linhas afetadas"
                 break;
             }
             
@@ -230,15 +226,11 @@ function processSingleTable(lines, headerIndex, dashIndex) {
                 continue;
             }
             
-            // Se a linha está em branco, registra mas continua
+            // Se a linha está em branco, apenas pula
             if (line.trim() === '') {
-                linhasEmBrancoConsecutivas++;
                 i++;
                 continue;
             }
-            
-            // Reset contador de brancos quando encontra dados
-            linhasEmBrancoConsecutivas = 0;
             
             // Processar linha de dados
             const row = {};
@@ -248,7 +240,11 @@ function processSingleTable(lines, headerIndex, dashIndex) {
                 if (col && col.start !== undefined && col.end !== undefined) {
                     // Garantir que não ultrapasse o tamanho da linha
                     const endPos = Math.min(col.end, line.length);
-                    let value = line.substring(col.start, endPos).replace(/\s+$/, '');
+                    let value = line.substring(col.start, endPos);
+                    
+                    // Importante: NÃO fazer trim completo para preservar zeros à esquerda
+                    // Apenas remove espaços do final, mantém espaços do início
+                    value = value.replace(/\s+$/, '');
                     
                     if (value === '') {
                         row[col.name] = null;
@@ -267,7 +263,7 @@ function processSingleTable(lines, headerIndex, dashIndex) {
             i++;
         }
         
-        console.log(`processSingleTable: processou ${data.length} registros, fim por ${encontrouLinhaAfetadas ? 'linhas afetadas' : 'fim do arquivo'}`);
+        console.log(`processSingleTable: processou ${data.length} registros`);
         
         return {
             data: data,
@@ -439,31 +435,112 @@ function removeTable(tableName, event) {
     }
 }
 
+// =========== NOVA VERSÃO DA EXECUÇÃO DE CONSULTAS ===========
+
 function executeQuery() {
     const sqlEditor = document.getElementById('sqlQuery');
     if (!sqlEditor) return;
     
-    const sql = sqlEditor.value;
-    if (!sql.trim()) {
+    const sql = sqlEditor.value.trim();
+    if (!sql) {
         showMessage('Digite uma consulta SQL.', 'warning');
         return;
     }
 
+    // Se for uma consulta SELECT simples, podemos tentar processar manualmente
+    if (sql.toUpperCase().startsWith('SELECT * FROM')) {
+        executeSimpleSelect(sql);
+    } else {
+        executeComplexQuery(sql);
+    }
+}
+
+function executeSimpleSelect(sql) {
+    try {
+        // Extrair o nome da tabela
+        const match = sql.match(/SELECT\s+\*\s+FROM\s+(\w+)/i);
+        if (!match) {
+            executeComplexQuery(sql);
+            return;
+        }
+        
+        const tableName = match[1];
+        const table = tables[tableName];
+        
+        if (!table) {
+            showMessage(`Tabela '${tableName}' não encontrada.`, 'error');
+            return;
+        }
+        
+        // Verificar se tem WHERE
+        let filteredData = table.data;
+        
+        if (sql.toUpperCase().includes('WHERE')) {
+            const wherePart = sql.split('WHERE')[1].trim();
+            filteredData = applyWhereFilter(table.data, wherePart);
+        }
+        
+        renderTable(filteredData);
+        showMessage(`✅ Consulta executada. ${filteredData.length} linhas retornadas.`, 'success');
+        
+    } catch (e) {
+        console.error('Erro no executeSimpleSelect:', e);
+        executeComplexQuery(sql);
+    }
+}
+
+function applyWhereFilter(data, whereClause) {
+    try {
+        // Parse simples do WHERE
+        // Ex: rtsistema = '050'
+        const match = whereClause.match(/(\w+)\s*=\s*'([^']*)'/);
+        if (!match) return data;
+        
+        const field = match[1];
+        const value = match[2];
+        
+        console.log(`Filtrando: ${field} = '${value}'`);
+        
+        // Filtrar os dados
+        const results = data.filter(row => {
+            const rowValue = row[field];
+            if (rowValue === null || rowValue === undefined) return false;
+            
+            // Converter para string e comparar de várias formas
+            const rowValueStr = String(rowValue).trim();
+            const searchValue = value.trim();
+            
+            return rowValueStr === searchValue;
+        });
+        
+        console.log(`Encontrados ${results.length} resultados`);
+        return results;
+        
+    } catch (e) {
+        console.error('Erro no filtro:', e);
+        return data;
+    }
+}
+
+function executeComplexQuery(sql) {
     try {
         // Registrar todas as tabelas no AlaSQL
         Object.keys(tables).forEach(tableName => {
             const table = tables[tableName];
             if (!table || !table.data) return;
             
-            // Limpar dados anteriores
             alasql(`DROP TABLE IF EXISTS ${tableName}`);
             alasql(`CREATE TABLE ${tableName}`);
             
-            // Converter dados para o formato que o AlaSQL espera
+            // Converter dados garantindo que tudo seja string
             alasql.tables[tableName].data = table.data.map(row => {
                 const newRow = {};
                 Object.keys(row).forEach(key => {
-                    newRow[key] = row[key] === null ? null : String(row[key]);
+                    if (row[key] === null || row[key] === undefined) {
+                        newRow[key] = null;
+                    } else {
+                        newRow[key] = String(row[key]);
+                    }
                 });
                 return newRow;
             });
@@ -475,55 +552,116 @@ function executeQuery() {
         
         if (result && Array.isArray(result)) {
             renderTable(result);
-            showMessage(`Query executada em ${(endTime - startTime).toFixed(2)}ms. ${result.length} linhas retornadas.`, 'success');
+            showMessage(`✅ Query executada em ${(endTime - startTime).toFixed(2)}ms. ${result.length} linhas retornadas.`, 'success');
         } else {
-            showMessage('Query executada com sucesso.', 'success');
+            showMessage('✅ Query executada com sucesso.', 'success');
         }
         
     } catch (e) {
-        showMessage('Erro SQL: ' + e.message, 'error');
+        showMessage('❌ Erro SQL: ' + e.message, 'error');
         console.error('Erro detalhado:', e);
     }
 }
 
-function executeSelectedQuery() {
-    const textarea = document.getElementById('sqlQuery');
-    if (!textarea) return;
-    
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    
-    if (start === end) {
-        showMessage('Selecione um trecho da consulta para executar.', 'warning');
+// =========== NOVA FUNÇÃO DE DIAGNÓSTICO ===========
+
+function diagnosticarConsulta() {
+    if (!currentTable || !tables[currentTable]) {
+        showMessage('Selecione uma tabela primeiro.', 'warning');
         return;
     }
     
-    const selectedSQL = textarea.value.substring(start, end).trim();
-    if (!selectedSQL) return;
+    const table = tables[currentTable];
+    const campo = prompt('Digite o nome do campo para diagnosticar (ex: rtsistema):');
+    if (!campo) return;
     
-    const selectionContent = document.getElementById('selectionContent');
-    if (selectionContent) {
-        selectionContent.textContent = selectedSQL;
+    const valor = prompt(`Digite o valor que você está procurando no campo '${campo}':`);
+    if (!valor) return;
+    
+    // Verificar se o campo existe
+    if (!table.columns.includes(campo)) {
+        let msg = `❌ Campo '${campo}' não encontrado!\n\n`;
+        msg += `Campos disponíveis:\n${table.columns.join(', ')}`;
+        showMessage(msg, 'error');
+        return;
     }
     
-    // Registrar tabelas
-    Object.keys(tables).forEach(tableName => {
-        const table = tables[tableName];
-        if (!table || !table.data) return;
-        
-        alasql(`DROP TABLE IF EXISTS ${tableName}`);
-        alasql(`CREATE TABLE ${tableName}`);
-        alasql.tables[tableName].data = table.data;
+    // Coletar amostra dos valores
+    const valores = table.data.map(row => row[campo]).filter(v => v !== null);
+    const valoresUnicos = [...new Set(valores)];
+    
+    let msg = `📊 DIAGNÓSTICO DO CAMPO '${campo}'\n`;
+    msg += `================================\n\n`;
+    msg += `Total de registros: ${table.data.length}\n`;
+    msg += `Registros com valor não-nulo: ${valores.length}\n`;
+    msg += `Valores únicos: ${valoresUnicos.length}\n\n`;
+    
+    // Mostrar primeiros 20 valores únicos
+    msg += `Primeiros 20 valores únicos (como estão armazenados):\n`;
+    valoresUnicos.slice(0, 20).forEach(v => {
+        msg += `  "${v}" (length: ${String(v).length})\n`;
     });
     
-    try {
-        const result = alasql(selectedSQL);
-        if (result && Array.isArray(result)) {
-            renderTable(result);
-            showMessage(`Query selecionada executada. ${result.length} linhas retornadas.`, 'success');
+    // Verificar se o valor procurado existe
+    const valorProcurado = valor;
+    const encontrado = valores.some(v => String(v).trim() === valorProcurado.trim());
+    
+    msg += `\n🔍 Buscando por '${valorProcurado}': ${encontrado ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO'}\n`;
+    
+    if (!encontrado) {
+        msg += `\n💡 Sugestões:\n`;
+        msg += `- Tente: SELECT * FROM ${currentTable} WHERE ${campo} LIKE '%${valorProcurado}%'\n`;
+        msg += `- Verifique se há espaços extras nos dados\n`;
+        msg += `- Confirme se o campo realmente tem este valor\n`;
+    }
+    
+    showMessage(msg, 'info');
+}
+
+// =========== NOVA FUNÇÃO DE BUSCA MANUAL ===========
+
+function buscarManual() {
+    if (!currentTable || !tables[currentTable]) {
+        showMessage('Selecione uma tabela primeiro.', 'warning');
+        return;
+    }
+    
+    const table = tables[currentTable];
+    const campo = prompt('Digite o nome do campo para buscar:');
+    if (!campo) return;
+    
+    if (!table.columns.includes(campo)) {
+        showMessage(`Campo '${campo}' não encontrado.`, 'error');
+        return;
+    }
+    
+    const valor = prompt(`Digite o valor para buscar no campo '${campo}':`);
+    if (!valor) return;
+    
+    // Busca manual nos dados
+    const resultados = table.data.filter(row => {
+        const rowValue = row[campo];
+        if (rowValue === null || rowValue === undefined) return false;
+        return String(rowValue).trim().toLowerCase() === valor.trim().toLowerCase();
+    });
+    
+    if (resultados.length > 0) {
+        renderTable(resultados);
+        showMessage(`✅ Encontrados ${resultados.length} registros com '${campo}' = '${valor}'`, 'success');
+    } else {
+        showMessage(`❌ Nenhum registro encontrado com '${campo}' = '${valor}'`, 'warning');
+        
+        // Mostrar valores próximos como sugestão
+        const valoresProximos = table.data
+            .map(row => row[campo])
+            .filter(v => v !== null && String(v).toLowerCase().includes(valor.toLowerCase()))
+            .slice(0, 10);
+        
+        if (valoresProximos.length > 0) {
+            let msg = `Valores similares encontrados:\n`;
+            valoresProximos.forEach(v => msg += `  "${v}"\n`);
+            showMessage(msg, 'info');
         }
-    } catch (e) {
-        showMessage('Erro: ' + e.message, 'error');
     }
 }
 
@@ -541,14 +679,11 @@ function showAllTables() {
         const table = tables[name];
         if (table) {
             msg += `📊 ${table.displayName || name}\n`;
-            msg += `   📍 Nome interno: ${name}\n`;
             msg += `   📍 Linhas: ${table.rowCount || 0}\n`;
             msg += `   📍 Colunas: ${(table.columns || []).length}\n`;
             msg += `   📍 Campos: ${(table.columns || []).slice(0, 8).join(', ')}${(table.columns || []).length > 8 ? '...' : ''}\n\n`;
         }
     });
-    
-    msg += '\n💡 Dica: Use SELECT * FROM nome_da_tabela';
     
     showMessage(msg, 'info');
 }
@@ -571,7 +706,7 @@ function downloadCurrentExcel() {
         XLSX.utils.book_append_sheet(wb, ws, tables[currentTable].displayName || currentTable);
         XLSX.writeFile(wb, `${tables[currentTable].displayName || currentTable}.xlsx`);
         
-        showMessage(`✅ Tabela "${tables[currentTable].displayName || currentTable}" exportada com sucesso!`, 'success');
+        showMessage(`✅ Tabela exportada com sucesso!`, 'success');
     } catch (e) {
         showMessage('Erro ao exportar: ' + e.message, 'error');
     }
@@ -621,7 +756,7 @@ function clearAllData() {
     
     const messageArea = document.getElementById('messageArea');
     if (messageArea) {
-        messageArea.innerHTML = 'Mensagens\n---------------\n✅ Dados limpos. Sistema pronto.';
+        messageArea.innerHTML = 'Mensagens\n---------------\n✅ Dados limpos.';
     }
     
     showMessage('Todos os dados foram removidos.', 'info');
@@ -647,8 +782,8 @@ function renderTable(data) {
     });
     html += '</tr></thead><tbody>';
     
-    // Limitar a exibição para 10000 linhas por vez (performance)
-    const maxLinhas = 10000;
+    // Limitar a exibição para 1000 linhas por vez (performance)
+    const maxLinhas = 1000;
     const linhasParaMostrar = data.slice(0, maxLinhas);
     
     linhasParaMostrar.forEach(row => {
@@ -659,7 +794,6 @@ function renderTable(data) {
                 html += '<td class="null-value">NULL</td>';
             } else {
                 value = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                value = value.replace(/[\n\r\t]+/g, ' ').replace(/\s+/g, ' ').trim();
                 html += `<td title="${value}">${value}</td>`;
             }
         });
@@ -676,7 +810,7 @@ function renderTable(data) {
         footer.style.color = '#888';
         footer.style.fontSize = '11px';
         footer.style.borderTop = '1px solid #3e3e42';
-        footer.textContent = `Mostrando ${maxLinhas} de ${data.length} linhas. Use consultas SQL para filtrar os dados.`;
+        footer.textContent = `Mostrando ${maxLinhas} de ${data.length} linhas. Use consultas SQL para filtrar.`;
         table.parentElement.appendChild(footer);
     }
 }
