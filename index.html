@@ -102,6 +102,13 @@ Sistema pronto. Carregue um arquivo .rpt com múltiplas tabelas.
             <div class="table-container">
                 <table id="output"></table>
             </div>
+
+            <div class="btn-group" id="resultActions" style="display: none; margin-top: 10px;">
+                <button onclick="generateInserts()">
+                    📝 Gerar INSERTs
+                </button>
+                <input type="text" id="insertTableName" placeholder="Nome da tabela destino" style="margin-left: 10px; padding: 5px; width: 200px;">
+            </div>
         </div>
     </div>
 

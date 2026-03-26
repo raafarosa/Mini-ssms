@@ -738,6 +738,162 @@ function clearAllData() {
     showMessage('Todos os dados foram removidos.', 'info');
 }
 
+function showResultActions() {
+    const resultActions = document.getElementById('resultActions');
+    if (resultActions) {
+        resultActions.style.display = 'block';
+    }
+}
+
+function hideResultActions() {
+    const resultActions = document.getElementById('resultActions');
+    if (resultActions) {
+        resultActions.style.display = 'none';
+    }
+}
+
+function generateInserts() {
+    const tableNameInput = document.getElementById('insertTableName');
+    if (!tableNameInput) return;
+    
+    const tableName = tableNameInput.value.trim();
+    if (!tableName) {
+        showMessage('Digite o nome da tabela destino.', 'warning');
+        return;
+    }
+
+    // Obter os dados atuais da tabela exibida
+    const table = document.getElementById('output');
+    if (!table) return;
+    
+    const rows = table.querySelectorAll('tbody tr');
+    if (rows.length === 0) {
+        showMessage('Nenhum dado para gerar INSERTs.', 'warning');
+        return;
+    }
+
+    // Obter colunas do cabeçalho
+    const headers = table.querySelectorAll('thead th');
+    const columns = Array.from(headers).map(th => th.textContent.trim());
+    
+    if (columns.length === 0) {
+        showMessage('Não foi possível determinar as colunas.', 'error');
+        return;
+    }
+
+    // Gerar INSERTs
+    let inserts = [];
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length !== columns.length) return;
+        
+        let values = [];
+        cells.forEach(cell => {
+            let value = cell.textContent.trim();
+            if (cell.classList.contains('null-value') || value === 'NULL') {
+                values.push('NULL');
+            } else {
+                // Escapar aspas simples e envolver em aspas
+                value = value.replace(/'/g, "''");
+                values.push(`'${value}'`);
+            }
+        });
+        
+        const insert = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values.join(', ')});`;
+        inserts.push(insert);
+    });
+
+    if (inserts.length === 0) {
+        showMessage('Nenhum INSERT gerado.', 'warning');
+        return;
+    }
+
+    // Mostrar os INSERTs em uma nova aba ou modal
+    showInsertsModal(inserts);
+    showMessage(`✅ ${inserts.length} comandos INSERT gerados.`, 'success');
+}
+
+function showInsertsModal(inserts) {
+    // Criar modal para mostrar os INSERTs
+    const modal = document.createElement('div');
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100%';
+    modal.style.height = '100%';
+    modal.style.backgroundColor = 'rgba(0,0,0,0.7)';
+    modal.style.zIndex = '1000';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+
+    const modalContent = document.createElement('div');
+    modalContent.style.backgroundColor = '#1e1e1e';
+    modalContent.style.padding = '20px';
+    modalContent.style.borderRadius = '8px';
+    modalContent.style.width = '80%';
+    modalContent.style.maxWidth = '800px';
+    modalContent.style.maxHeight = '80%';
+    modalContent.style.overflow = 'auto';
+    modalContent.style.color = '#fff';
+
+    const title = document.createElement('h3');
+    title.textContent = 'Comandos INSERT Gerados';
+    title.style.marginBottom = '10px';
+
+    const textarea = document.createElement('textarea');
+    textarea.value = inserts.join('\n');
+    textarea.style.width = '100%';
+    textarea.style.height = '400px';
+    textarea.style.backgroundColor = '#2d2d30';
+    textarea.style.color = '#fff';
+    textarea.style.border = '1px solid #3e3e42';
+    textarea.style.padding = '10px';
+    textarea.style.fontFamily = 'monospace';
+    textarea.style.resize = 'vertical';
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.marginTop = '10px';
+    buttonContainer.style.textAlign = 'right';
+
+    const copyButton = document.createElement('button');
+    copyButton.textContent = 'Copiar';
+    copyButton.style.marginRight = '10px';
+    copyButton.onclick = () => {
+        textarea.select();
+        document.execCommand('copy');
+        showMessage('INSERTs copiados para a área de transferência.', 'success');
+    };
+
+    const executeButton = document.createElement('button');
+    executeButton.textContent = 'Executar no AlaSQL';
+    executeButton.style.marginRight = '10px';
+    executeButton.onclick = () => {
+        try {
+            inserts.forEach(insert => alasql(insert));
+            showMessage('INSERTs executados com sucesso no AlaSQL.', 'success');
+            modal.remove();
+        } catch (e) {
+            showMessage('Erro ao executar INSERTs: ' + e.message, 'error');
+        }
+    };
+
+    const closeButton = document.createElement('button');
+    closeButton.textContent = 'Fechar';
+    closeButton.onclick = () => modal.remove();
+
+    buttonContainer.appendChild(copyButton);
+    buttonContainer.appendChild(executeButton);
+    buttonContainer.appendChild(closeButton);
+
+    modalContent.appendChild(title);
+    modalContent.appendChild(textarea);
+    modalContent.appendChild(buttonContainer);
+    modal.appendChild(modalContent);
+
+    document.body.appendChild(modal);
+}
+
 function renderTable(data) {
     const table = document.getElementById('output');
     if (!table) return;
@@ -746,11 +902,15 @@ function renderTable(data) {
     
     if (!data || data.length === 0) {
         table.innerHTML = '<tr><td style="text-align:center; padding:20px;">Nenhum resultado</td></tr>';
+        hideResultActions();
         return;
     }
 
     const cols = Object.keys(data[0] || {});
-    if (cols.length === 0) return;
+    if (cols.length === 0) {
+        hideResultActions();
+        return;
+    }
     
     let html = '<thead><tr>';
     cols.forEach(col => {
@@ -787,6 +947,8 @@ function renderTable(data) {
         footer.textContent = `Mostrando ${maxLinhas} de ${data.length} linhas. Use consultas SQL para filtrar.`;
         table.parentElement.appendChild(footer);
     }
+
+    showResultActions();
 }
 
 function showMessage(msg, type = 'info') {
