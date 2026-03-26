@@ -865,25 +865,11 @@ function showInsertsModal(inserts) {
         showMessage('INSERTs copiados para a área de transferência.', 'success');
     };
 
-    const executeButton = document.createElement('button');
-    executeButton.textContent = 'Executar no AlaSQL';
-    executeButton.style.marginRight = '10px';
-    executeButton.onclick = () => {
-        try {
-            inserts.forEach(insert => alasql(insert));
-            showMessage('INSERTs executados com sucesso no AlaSQL.', 'success');
-            modal.remove();
-        } catch (e) {
-            showMessage('Erro ao executar INSERTs: ' + e.message, 'error');
-        }
-    };
-
     const closeButton = document.createElement('button');
     closeButton.textContent = 'Fechar';
     closeButton.onclick = () => modal.remove();
 
     buttonContainer.appendChild(copyButton);
-    buttonContainer.appendChild(executeButton);
     buttonContainer.appendChild(closeButton);
 
     modalContent.appendChild(title);
