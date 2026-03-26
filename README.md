@@ -1,6 +1,6 @@
 # Mini SSMS - Analisador de Múltiplas Tabelas RPT
 
-![Version](https://img.shields.io/badge/version-2.0-blue)
+![Version](https://img.shields.io/badge/version-2.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen)
 
