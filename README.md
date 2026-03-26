@@ -8,15 +8,16 @@ Uma ferramenta web inspirada no SQL Server Management Studio (SSMS) para anális
 
 ## 🚀 Funcionalidades
 
-- **📁 Upload de arquivos .rpt** - Carregue seus relatórios diretamente
-- **📊 Múltiplas tabelas** - Detecta automaticamente vários resultados no mesmo arquivo
-- **🔍 Detecção inteligente** - Reconhece nomes de tabelas antes dos cabeçalhos
-- **📑 Abas de resultados** - Cada tabela em uma aba com contagem de linhas
-- **💻 Editor SQL** - Execute consultas como SELECT, WHERE, JOIN, etc.
-- **✂️ Execução parcial** - Execute apenas o trecho selecionado do SQL
-- **📋 Listagem de estrutura** - Veja colunas e tipos disponíveis
-- **📥 Exportação Excel** - Exporte qualquer tabela para .xlsx
-- **⌨️ Atalho F5** - Execute consultas rapidamente
+- **Upload de arquivos .rpt** - Carregue seus relatórios diretamente
+- **Múltiplas tabelas** - Detecta automaticamente vários resultados no mesmo arquivo
+- **Detecção inteligente** - Reconhece nomes de tabelas antes dos cabeçalhos
+- **Abas de resultados** - Cada tabela em uma aba com contagem de linhas
+- **Editor SQL** - Execute consultas como SELECT, WHERE, JOIN, etc.
+- **Execução parcial** - Execute apenas o trecho selecionado do SQL
+- **Listagem de estrutura** - Veja colunas e tipos disponíveis
+- **Exportação Excel** - Exporte qualquer tabela para .xlsx
+- **Atalho F5** - Execute consultas rapidamente
+- **Gerar inserts** - Gere inserts das informações tratadas
 
 ## 🖥️ Como usar
 
